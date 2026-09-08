@@ -1,0 +1,6 @@
+{
+  "name": "Hisabx",
+  "description": "har kharche, ka hisab .",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
