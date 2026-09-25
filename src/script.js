@@ -1,4 +1,33 @@
 import "./style.css";
+import { App } from '@capacitor/app';
+import { StatusBar, Style } from '@capacitor/status-bar';
+
+// Setup Capacitor for Android
+async function setupCapacitor() {
+  try {
+    // Handle Android hardware back button
+    App.addListener('backButton', ({ canGoBack }) => {
+      const currentView = document.querySelector('.view.active');
+      const isOnDashboard = currentView && currentView.id === 'view-dashboard';
+      const isModalOpen = !document.getElementById('delete-modal').classList.contains('hidden') || 
+                          !document.getElementById('extra-budget-delete-modal').classList.contains('hidden');
+
+      if (isModalOpen) {
+        document.getElementById('delete-modal').classList.add('hidden');
+        document.getElementById('extra-budget-delete-modal').classList.add('hidden');
+      } else if (!isOnDashboard) {
+        window.app.switchTab('dashboard'); // go back to main dashboard
+      } else {
+        App.exitApp(); // exit if already on dashboard
+      }
+    });
+
+    // We can observe theme changes and update the status bar if needed, 
+    // but the system will default to the manifest/native styles as well.
+  } catch(e) {
+    // Ignore, running in web browser where Capacitor isn't native
+  }
+}
 
 // Constants
 const CATEGORIES = {
@@ -15,7 +44,7 @@ const CATEGORIES = {
 };
 
 const DEFAULT_SETTINGS = {
-  monthlyBudget: 10000,
+  monthlyBudget: 0,
   theme: 'light',
   language: 'en'
 };
@@ -162,6 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
   applyTranslations(); // Initialize language
   setupEventListeners();
   populateCategoryDropdowns();
+  setupCapacitor();
   
   // Set default date to today in form
   document.getElementById('expense-date').valueAsDate = new Date();
@@ -175,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function checkOnboarding() {
-  const onboardingCompleted = localStorage.getItem('hisabx_onboardingCompleted');
+  const onboardingCompleted = localStorage.getItem('hisaabx_onboardingCompleted');
   const obOverlay = document.getElementById('onboarding-overlay');
   
   if (onboardingCompleted === 'true') {
@@ -191,9 +221,18 @@ function checkOnboarding() {
 
 // --- Data Management ---
 function loadData() {
-  expenses = JSON.parse(localStorage.getItem('hisabx_expenses')) || [];
-  settings = JSON.parse(localStorage.getItem('hisabx_settings')) || { ...DEFAULT_SETTINGS };
-  monthlyBudgets = JSON.parse(localStorage.getItem('hisabx_budgets')) || {};
+  expenses = JSON.parse(localStorage.getItem('hisaabx_expenses')) || [];
+  settings = JSON.parse(localStorage.getItem('hisaabx_settings')) || { ...DEFAULT_SETTINGS };
+  monthlyBudgets = JSON.parse(localStorage.getItem('hisaabx_budgets')) || {};
+  
+  // Force reset all data to 0 as requested by user to make dashboard completely 0
+  if (!localStorage.getItem('hisaabx_hard_reset_done_v2')) {
+    expenses = [];
+    settings.monthlyBudget = 0;
+    monthlyBudgets = {};
+    localStorage.setItem('hisaabx_hard_reset_done_v2', 'true');
+    saveData();
+  }
   
   const now = new Date();
   selectedMonthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -205,9 +244,9 @@ function loadData() {
 }
 
 function saveData() {
-  localStorage.setItem('hisabx_expenses', JSON.stringify(expenses));
-  localStorage.setItem('hisabx_settings', JSON.stringify(settings));
-  localStorage.setItem('hisabx_budgets', JSON.stringify(monthlyBudgets));
+  localStorage.setItem('hisaabx_expenses', JSON.stringify(expenses));
+  localStorage.setItem('hisaabx_settings', JSON.stringify(settings));
+  localStorage.setItem('hisaabx_budgets', JSON.stringify(monthlyBudgets));
 }
 
 function getBudgetForMonth(monthStr) {
@@ -222,11 +261,7 @@ function getBudgetForMonth(monthStr) {
 
 // --- Formatters ---
 const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0
-  }).format(amount);
+  return '₹' + amount.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 };
 
 const formatDate = (dateString) => {
@@ -248,7 +283,7 @@ function setupEventListeners() {
     const lang = document.querySelector('input[name="ob-lang"]:checked').value;
     settings.language = lang;
     document.getElementById('setting-language').value = lang;
-    localStorage.setItem('hisabx_onboardingCompleted', 'true');
+    localStorage.setItem('hisaabx_onboardingCompleted', 'true');
     saveData();
     applyTranslations();
     
@@ -350,7 +385,18 @@ function setupEventListeners() {
   document.getElementById('btn-export-pdf').addEventListener('click', exportDataPDF);
   document.getElementById('btn-share-report').addEventListener('click', shareReport);
   document.getElementById('btn-import').addEventListener('change', importData);
-  document.getElementById('btn-clear-data').addEventListener('click', clearAllData);
+  document.getElementById('btn-clear-data').addEventListener('click', () => {
+    document.getElementById('clear-data-modal').classList.remove('hidden');
+  });
+
+  document.getElementById('btn-cancel-clear').addEventListener('click', () => {
+    document.getElementById('clear-data-modal').classList.add('hidden');
+  });
+
+  document.getElementById('btn-confirm-clear').addEventListener('click', () => {
+    document.getElementById('clear-data-modal').classList.add('hidden');
+    clearAllData();
+  });
 
   // Analytics Tabs
   document.querySelectorAll('[data-analytics-tab]').forEach(btn => {
@@ -1176,7 +1222,7 @@ function exportDataPDF() {
   // Header
   doc.setFontSize(22);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text("HisabX", 14, 20);
+  doc.text("HisaabX", 14, 20);
   
   doc.setFontSize(14);
   doc.setTextColor(50, 50, 50);
@@ -1230,7 +1276,7 @@ function exportDataPDF() {
   });
 
   // Save PDF
-  const fileName = `HisabX-Expense-Report-${titleMonth}.pdf`;
+  const fileName = `HisaabX-Expense-Report-${titleMonth}.pdf`;
   doc.save(fileName);
   showToast('PDF report downloaded successfully');
 }
@@ -1265,7 +1311,7 @@ function exportDataCSV() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `hisabx_report_${new Date().toISOString().split('T')[0]}.csv`;
+  a.download = `hisaabx_report_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
   showToast('CSV report exported successfully');
@@ -1278,11 +1324,11 @@ async function shareReport() {
     return;
   }
   
-  const fileName = `hisabx_report_${new Date().toISOString().split('T')[0]}.csv`;
+  const fileName = `hisaabx_report_${new Date().toISOString().split('T')[0]}.csv`;
   const file = new File([csv], fileName, { type: 'text/csv' });
   const shareData = {
-    title: 'Hisabx Expense Report',
-    text: 'Here is my expense report from Hisabx.',
+    title: 'HisaabX Expense Report',
+    text: 'Here is my expense report from HisaabX.',
   };
   
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1290,7 +1336,7 @@ async function shareReport() {
   } else {
     // Fallback: Just share a text summary if file sharing isn't supported
     const total = expenses.reduce((sum, e) => sum + e.amount, 0);
-    shareData.text = `Here is my expense report from Hisabx. Total spent: ${formatCurrency(total)} across ${expenses.length} transactions.`;
+    shareData.text = `Here is my expense report from HisaabX. Total spent: ${formatCurrency(total)} across ${expenses.length} transactions.`;
   }
   
   if (navigator.share) {
@@ -1314,7 +1360,7 @@ function exportData() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `hisabx_backup_${new Date().toISOString().split('T')[0]}.json`;
+  a.download = `hisaabx_backup_${new Date().toISOString().split('T')[0]}.json`;
   a.click();
   URL.revokeObjectURL(url);
   showToast('Data exported successfully');
@@ -1363,12 +1409,19 @@ function importData(e) {
 }
 
 function clearAllData() {
-  if (confirm("Are you absolutely sure you want to delete ALL your expense data? This cannot be undone.")) {
-    expenses = [];
-    saveData();
-    renderAll();
-    showToast('All data cleared');
-  }
+  expenses = [];
+  settings = { ...DEFAULT_SETTINGS };
+  monthlyBudgets = {};
+  localStorage.removeItem('hisaabx_expenses');
+  localStorage.removeItem('hisaabx_settings');
+  localStorage.removeItem('hisaabx_budgets');
+  localStorage.removeItem('hisaabx_onboardingCompleted');
+  saveData();
+  applyTheme();
+  applyTranslations();
+  
+  // Directly reload the page so the app resets cleanly and shows onboarding
+  window.location.reload();
 }
 
 // --- UI Utilities ---
